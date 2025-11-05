@@ -1,15 +1,14 @@
-// backend/src/main/java/com/example/githuborgsnapshot/service/GitHubService.java
 package com.example.githuborgsnapshot.service;
 
 import com.example.githuborgsnapshot.dto.GitHubRepo;
 import com.example.githuborgsnapshot.dto.RepoDto;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
-import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -47,47 +46,45 @@ public class GitHubService {
             .collect(Collectors.toList());
   }
 
-  @Cacheable(cacheNames = "repos", key = "#org")
   public List<GitHubRepo> getRepos(String org) {
-    List<GitHubRepo> fromOrg = fetch("/orgs/{org}/repos?per_page=100", org);
+    List<GitHubRepo> fromOrg = fetchOrNull("/orgs/{org}/repos?per_page=100", org);
     if (fromOrg != null) return fromOrg;
 
-    List<GitHubRepo> fromUser = fetch("/users/{org}/repos?per_page=100", org);
+    List<GitHubRepo> fromUser = fetchOrNull("/users/{org}/repos?per_page=100", org);
     if (fromUser != null) return fromUser;
 
     throw new ResponseStatusException(HttpStatus.NOT_FOUND,
             "Organization or user '" + org + "' not found on GitHub.");
   }
 
-  private List<GitHubRepo> fetch(String pathTemplate, String org) {
+  private List<GitHubRepo> fetchOrNull(String pathTemplate, String org) {
     try {
       return github.get()
               .uri(pathTemplate, org)
-              .retrieve()
-              .onStatus(HttpStatusCode::is4xxClientError, res -> {
-                if (res.statusCode().value() == 404) return Mono.empty();
-                return res.bodyToMono(String.class)
-                        .defaultIfEmpty("GitHub 4xx error")
-                        .flatMap(msg -> Mono.error(new ResponseStatusException(res.statusCode(), msg)));
-              })
-              .onStatus(HttpStatusCode::is5xxServerError, res ->
-                      res.bodyToMono(String.class)
-                              .defaultIfEmpty("GitHub 5xx error")
-                              .flatMap(msg -> Mono.error(new ResponseStatusException(res.statusCode(), msg))))
-              .bodyToFlux(GitHubRepo.class)
+              .exchangeToFlux(resp -> handle(resp))
               .collectList()
-              .onErrorResume(ex -> {
-                if (ex instanceof ResponseStatusException rse && rse.getStatusCode().value() == 404) {
-                  return Mono.empty();
-                }
-                return Mono.error(ex);
-              })
               .block();
-    } catch (ResponseStatusException rse) {
-      if (rse.getStatusCode().value() == 404) return null;
-      throw rse;
+    } catch (NotFoundMarker nf) {
+      return null; // почему: сигнал для fallback
     }
   }
+
+  private Flux<GitHubRepo> handle(ClientResponse resp) {
+    HttpStatusCode sc = resp.statusCode();
+    int code = sc.value();
+
+    if (code == 404) {
+      throw new NotFoundMarker();
+    }
+    if (code >= 400 && code < 600) {
+      return resp.bodyToMono(String.class)
+              .defaultIfEmpty(sc.toString())
+              .flatMapMany(msg -> Flux.error(new ResponseStatusException(sc, msg)));
+    }
+    return resp.bodyToFlux(GitHubRepo.class);
+  }
+
+  private static class NotFoundMarker extends RuntimeException { }
 
   private SortBy normalizeSort(String sort) {
     if (sort == null) return SortBy.STARS;
@@ -100,10 +97,6 @@ public class GitHubService {
   }
 
   private Instant parseInstantSafe(String iso) {
-    try {
-      return Instant.parse(iso);
-    } catch (Exception e) {
-      return Instant.EPOCH;
-    }
+    try { return Instant.parse(iso); } catch (Exception e) { return Instant.EPOCH; }
   }
 }

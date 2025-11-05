@@ -2,7 +2,9 @@ package com.example.githuborgsnapshot.service;
 
 import com.example.githuborgsnapshot.dto.RepoDto;
 import com.github.tomakehurst.wiremock.WireMockServer;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
@@ -14,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class GitHubServiceTest {
 
-    WireMockServer wm;
-    GitHubService service;
+    private WireMockServer wm;
+    private GitHubService service;
 
     @BeforeEach
     void setup() {
@@ -33,7 +35,7 @@ class GitHubServiceTest {
 
     @AfterEach
     void tearDown() {
-        wm.stop();
+        if (wm != null) wm.stop();
     }
 
     @Test
@@ -67,8 +69,7 @@ class GitHubServiceTest {
             """)));
 
         List<RepoDto> res = service.getTopRepos("acme", "updated", 3);
-        assertEquals(List.of("y","z","x"),
-                res.stream().map(RepoDto::name).toList());
+        assertEquals(List.of("y","z","x"), res.stream().map(RepoDto::name).toList());
     }
 
     @Test
@@ -95,6 +96,7 @@ class GitHubServiceTest {
         stubFor(get(urlPathEqualTo("/orgs/none/repos"))
                 .withQueryParam("per_page", equalTo("100"))
                 .willReturn(aResponse().withStatus(404)));
+
         stubFor(get(urlPathEqualTo("/users/none/repos"))
                 .withQueryParam("per_page", equalTo("100"))
                 .willReturn(aResponse().withStatus(404)));
