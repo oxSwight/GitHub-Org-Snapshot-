@@ -1,0 +1,13 @@
+server:
+  port: 8080
+
+app:
+  github:
+    base-url: https://api.github.com
+  cors:
+    allowed-origin: ${ALLOWED_ORIGIN:http://localhost:5173}
+
+logging:
+  level:
+    root: INFO
+    com.example.githuborgsnapshot: INFO

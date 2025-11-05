@@ -1,0 +1,19 @@
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+    <mirrors>
+        <mirror>
+            <id>central-repo1</id>
+            <name>Maven Central via repo1</name>
+            <url>https://repo1.maven.org/maven2/</url>
+            <mirrorOf>central</mirrorOf>
+        </mirror>
+    </mirrors>
+    <profiles>
+        <profile>
+            <id>ci-defaults</id>
+            <activation><activeByDefault>true</activeByDefault></activation>
+            <properties>
+                <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>
+            </properties>
+        </profile>
+    </profiles>
+</settings>
