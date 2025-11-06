@@ -65,7 +65,7 @@ public class GitHubService {
               .collectList()
               .block();
     } catch (NotFoundMarker nf) {
-      return null; // почему: сигнал для fallback
+      return null;
     }
   }
 
